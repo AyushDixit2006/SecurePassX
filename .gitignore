@@ -1,0 +1,46 @@
+# PYTHON
+__pycache__/
+*.py[cod]
+*$py.class
+
+
+# VIRTUAL ENVIRONMENT
+Secure_env/
+venv/
+env/
+
+
+# DJANGO
+db.sqlite3
+*.log
+*.pot
+*.pyc
+*.pyo
+
+
+# MEDIA / STATIC (OPTIONAL)
+media/
+staticfiles/
+
+
+# OS FILES
+.DS_Store
+Thumbs.db
+
+
+# IDE FILES
+.vscode/
+.idea/
+
+
+# TEST / CACHE
+.pytest_cache/
+.coverage
+
+
+# MIGRATION CACHE (KEEP MIGRATIONS!)
+**/migrations/*.pyc
+
+
+# Python-dotenv 
+.env

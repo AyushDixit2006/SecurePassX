@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>SecurePassX Dashboard</title>
+    <link rel="stylesheet" href="../css/style.css" />
+  </head>
+
+  <body>
+    <!-- 🌙 THEME TOGGLE -->
+    <div class="theme-toggle" onclick="toggleTheme()">🌙</div>
+
+    <div class="container">
+      <div class="card dashboard-card">
+        <h2>SecurePassX</h2>
+        <p class="subtitle">Security Dashboard</p>
+
+        <div class="dashboard-content modern-layout">
+          <h3>Welcome 👋</h3>
+
+          <!-- STATUS -->
+          <div class="status-box">
+            <p>
+              🔐 Authentication: <span class="success-text">Secure</span>
+            </p>
+            <p>
+              🧠 Face Recognition: <span class="success-text">Active</span>
+            </p>
+            <p>
+              📧 OTP System: <span class="success-text">Enabled</span>
+            </p>
+          </div>
+
+          <!-- ACTIVITY -->
+          <div class="status-box activity-box">
+            <h4>🔎 Activity Overview</h4>
+
+            <div class="activity-item">
+              <span>🕒 Last Login</span>
+              <span id="lastLogin" class="highlight-text">Loading...</span>
+            </div>
+
+            <div class="activity-item">
+              <span>💻 Device</span>
+              <span id="deviceInfo" class="device-text">Loading...</span>
+            </div>
+
+            <div class="activity-item">
+              <span>🌐 IP</span>
+              <span id="ipInfo" class="highlight-text">Loading...</span>
+            </div>
+          </div>
+
+          <button class="btn face" onclick="logout()">Logout</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="../js/login.js"></script>
+
+    <script>
+      // ================= MAIN EXECUTION =================
+      // ================= SECURE FETCH =================
+      async function secureFetch(url) {
+        let token = localStorage.getItem('access_token')
+      
+        let res = await fetch(url, {
+          headers: {
+            Authorization: 'Bearer ' + token
+          }
+        })
+      
+        // 🔥 IF TOKEN EXPIRED
+        if (res.status === 401) {
+          console.log('Token expired → refreshing...')
+      
+          let newToken = await refreshToken()
+      
+          if (!newToken) {
+            logout()
+            return null
+          }
+      
+          // 🔁 Retry request
+          return fetch(url, {
+            headers: {
+              Authorization: 'Bearer ' + newToken
+            }
+          })
+        }
+      
+        return res
+      }
+      
+      document.addEventListener('DOMContentLoaded', function () {
+        // 🔐 JWT CHECK
+        const token = localStorage.getItem('access_token')
+      
+        if (!token) {
+          window.location.href = 'login.html'
+          return
+        }
+        // APPLY SAVED THEME
+        const savedTheme = localStorage.getItem('theme')
+        if (savedTheme === 'light') {
+          document.body.classList.add('light')
+        }
+      
+        console.log('Dashboard Loaded ✅')
+      
+        const email = localStorage.getItem('user_email')
+      
+        console.log('EMAIL:', email)
+      
+        if (!email) {
+          console.log('No email found')
+          return
+        }
+      
+        secureFetch(`http://127.0.0.1:8000/api/auth/login-history/?email=${email}`)
+          .then((res) => {
+            if (!res) return
+            return res.json()
+          })
+          .then((data) => {
+            console.log('API DATA:', data)
+      
+            if (data.history && data.history.length > 0) {
+              let last = data.history[0]
+      
+              document.getElementById('lastLogin').innerText = last.time
+      
+              function formatDevice(device) {
+                if (!device) return 'Unknown'
+      
+                let os = ''
+                let browser = ''
+      
+                // ===== OS DETECTION =====
+                if (device.includes('Windows')) os = 'Windows'
+                else if (device.includes('Android')) os = 'Android'
+                else if (device.includes('iPhone')) os = 'iPhone'
+                else if (device.includes('Mac')) os = 'Mac'
+                else os = 'Unknown OS'
+      
+                // ===== BROWSER DETECTION =====
+                if (device.includes('Chrome')) browser = 'Chrome'
+                else if (device.includes('Firefox')) browser = 'Firefox'
+                else if (device.includes('Safari') && !device.includes('Chrome')) browser = 'Safari'
+                else if (device.includes('Edge')) browser = 'Edge'
+                else browser = 'Browser'
+      
+                // ===== FINAL OUTPUT =====
+                return `${browser}, ${os} `
+              }
+      
+              document.getElementById('deviceInfo').innerText = formatDevice(last.device)
+              document.getElementById('ipInfo').innerText = last.ip
+            } else {
+              document.getElementById('lastLogin').innerText = 'No data'
+              document.getElementById('deviceInfo').innerText = 'Unknown'
+              document.getElementById('ipInfo').innerText = '-'
+            }
+          })
+          .catch((err) => {
+            console.error('FETCH ERROR:', err)
+          })
+      })
+      
+      // ================= LOGOUT =================
+      function logout() {
+        const refresh = localStorage.getItem('refresh_token')
+      
+        fetch('http://127.0.0.1:8000/api/auth/logout/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ refresh })
+        })
+      
+        localStorage.clear()
+        window.location.href = 'login.html'
+      }
+      
+      // ================= THEME TOGGLE =================
+      function toggleTheme() {
+        const isLight = document.body.classList.toggle('light')
+        localStorage.setItem('theme', isLight ? 'light' : 'dark')
+      }
+    </script>
+  </body>
+</html>

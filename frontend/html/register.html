@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Register - SecurePassX</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+
+<body>
+
+    <!-- 🌙 THEME TOGGLE -->
+    <div class="theme-toggle" onclick="toggleTheme()">🌙</div>
+
+    <div class="container">
+
+        <div class="card">
+
+            <!-- HEADER -->
+            <h2>SecurePassX</h2>
+            <p class="subtitle">Create Account</p>
+
+            <!-- STEP INDICATOR -->
+            <div class="steps">
+                <div class="step active">1</div>
+                <div class="step">2</div>
+                <div class="step">3</div>
+            </div>
+
+            <!-- ================= STEP 1 (EMAIL) ================= -->
+            <div id="step1">
+
+                <input type="email" id="email" placeholder="Enter Email">
+
+                <button class="btn primary" onclick="sendOTP()">
+                    Continue
+                </button>
+
+            </div>
+
+            <!-- ================= STEP 2 (OTP) ================= -->
+            <div id="step2" style="display:none;">
+
+                <p class="subtitle">Enter OTP sent to your email</p>
+
+                <div class="otp-container" id="otpContainer">
+                    <input type="text" maxlength="1">
+                    <input type="text" maxlength="1">
+                    <input type="text" maxlength="1">
+                    <input type="text" maxlength="1">
+                    <input type="text" maxlength="1">
+                    <input type="text" maxlength="1">
+                </div>
+
+                <p id="resendOtpBtn" onclick="sendOTP()"
+                    style="display:none; cursor:pointer; color:#22c55e; text-align:center; margin-top:10px;">
+                    Resend OTP (<span id="timer">60</span>s)
+                </p>
+
+                <button class="btn primary" onclick="verifyOTP()">
+                    Verify & Continue
+                </button>
+
+            </div>
+
+            <!-- ================= STEP 3 (FACE) ================= -->
+            <div id="step3" style="display:none;">
+
+                <p class="subtitle">Setup Face ID</p>
+
+                <div class="camera-box">
+
+                    <div class="camera-circle">
+                        <video id="video" autoplay playsinline></video>
+
+
+                        <!-- SCAN LINE (SAME AS LOGIN) -->
+                        <div id="scanLine" class="scan-line"></div>
+                    </div>
+
+                    <canvas id="canvas" style="display:none;"></canvas>
+
+                    <div id="scanText">Click "Open Camera"</div>
+
+                    <!-- GUIDANCE -->
+                    <div class="face-guide">
+                        <p>📌 Instructions:</p>
+                        <ul>
+                            <li>Look straight into camera</li>
+                            <li>Ensure proper lighting</li>
+                            <li>Move slightly during scan</li>
+                        </ul>
+                    </div>
+
+                </div>
+
+
+                <button class="btn face" onclick="registerFace()">
+                    Capture & Register
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- ================= SCRIPTS ================= -->
+    <script src="../js/camera.js"></script>
+    <script src="../js/register.js"></script>
+
+    <script>
+
+        // ================= THEME =================
+        function toggleTheme() {
+            document.body.classList.toggle("light");
+            localStorage.setItem("theme", document.body.classList.contains("light") ? "light" : "dark");
+        }
+
+        // Load saved theme
+        if (localStorage.getItem("theme") === "light") {
+            document.body.classList.add("light");
+        }
+
+
+        // ================= STEP CONTROL =================
+        function goToStep(step) {
+
+            document.getElementById("step1").style.display = (step === 1) ? "block" : "none";
+            document.getElementById("step2").style.display = (step === 2) ? "block" : "none";
+            document.getElementById("step3").style.display = (step === 3) ? "block" : "none";
+
+            const steps = document.querySelectorAll(".step");
+
+            steps.forEach((s, i) => {
+                s.classList.toggle("active", i === step - 1);
+            });
+        }
+
+
+        // ================= OTP AUTO-FILL =================
+        const inputs = document.querySelectorAll("#otpContainer input");
+
+        inputs.forEach((input, index) => {
+
+            input.addEventListener("input", () => {
+                if (input.value.length === 1 && index < inputs.length - 1) {
+                    inputs[index + 1].focus();
+                }
+            });
+
+            input.addEventListener("keydown", (e) => {
+                if (e.key === "Backspace" && !input.value && index > 0) {
+                    inputs[index - 1].focus();
+                }
+            });
+
+            input.addEventListener("paste", (e) => {
+                let pasteData = e.clipboardData.getData("text").trim();
+
+                if (pasteData.length === 6) {
+                    inputs.forEach((inp, i) => {
+                        inp.value = pasteData[i] || "";
+                    });
+                    inputs[5].focus();
+                }
+                e.preventDefault();
+            });
+        });
+
+        function getOTPValue() {
+            return Array.from(inputs).map(i => i.value).join("");
+        }
+
+    </script>
+
+
+</body>
+
+</html>

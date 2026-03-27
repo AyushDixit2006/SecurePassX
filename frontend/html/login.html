@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>SecurePassX Login</title>
+    <link rel="stylesheet" href="../css/style.css" />
+  </head>
+
+  <body>
+    <!-- 🌙 THEME TOGGLE -->
+    <div class="theme-toggle" onclick="toggleTheme()">🌙</div>
+
+    <div class="container">
+      <div class="card">
+        <!-- HEADER -->
+        <h2>SecurePassX</h2>
+        <p class="subtitle">Passwordless Authentication</p>
+
+        <!-- STEP SELECT -->
+        <div class="auth-tabs">
+          <button class="tab active" onclick="showSection('otp')">OTP</button>
+          <button class="tab" onclick="showSection('face')">Face ID</button>
+        </div>
+
+        <!-- ================= OTP SECTION ================= -->
+        <div id="otpSection">
+          <input id="email" type="email" placeholder="Enter Email" />
+
+          <button id="sendOtpBtn" class="btn primary" onclick="sendOTP()">Send OTP</button>
+
+          <p id="resendOtpBtn" onclick="sendOTP()" style="display:none; cursor:pointer; color:#22c55e;">
+            Resend OTP (<span id="timer">60</span>s)
+          </p>
+
+          <div class="otp-container" id="otpContainer" style="display:none;">
+            <input type="text" maxlength="1" />
+            <input type="text" maxlength="1" />
+            <input type="text" maxlength="1" />
+            <input type="text" maxlength="1" />
+            <input type="text" maxlength="1" />
+            <input type="text" maxlength="1" />
+          </div>
+
+          <button class="btn primary" id="loginBtn" style="display:none;" onclick="loginOTP()">Login</button>
+        </div>
+
+        <!-- ================= FACE SECTION ================= -->
+        <div id="faceSection" style="display:none;">
+          <input type="email" id="faceEmail" placeholder="Enter Email" />
+
+          <div class="camera-box">
+            <div class="camera-circle">
+              <video id="video" autoplay playsinline></video>
+
+              <!-- SCAN LINE -->
+              <div class="scan-line"></div>
+            </div>
+
+            <canvas id="canvas" style="display:none;"></canvas>
+
+            <div id="scanText">Click "Open Camera"</div>
+
+            <!-- GUIDANCE -->
+            <div class="face-guide">
+              <p>📌 Instructions:</p>
+              <ul>
+                <li>Look straight into camera</li>
+                <li>Ensure proper lighting</li>
+                <li>Move slightly during scan</li>
+              </ul>
+            </div>
+          </div>
+
+          <button class="btn face" onclick="loginFace()">Scan & Login</button>
+
+          <button id="updateFaceBtn" class="btn warning" style="display:none;" onclick="updateFace()">Update Face</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= SCRIPTS ================= -->
+    <script src="../js/camera.js"></script>
+    <script src="../js/login.js"></script>
+
+    <script>
+      // ================= THEME =================
+      function toggleTheme() {
+        document.body.classList.toggle('light')
+        localStorage.setItem('theme', document.body.classList.contains('light') ? 'light' : 'dark')
+      }
+      
+      // Load saved theme
+      if (localStorage.getItem('theme') === 'light') {
+        document.body.classList.add('light')
+      }
+      
+      // ================= TAB SWITCH =================
+      function showSection(type) {
+        document.getElementById('otpSection').style.display = type === 'otp' ? 'block' : 'none'
+        document.getElementById('faceSection').style.display = type === 'face' ? 'block' : 'none'
+      
+        document.querySelectorAll('.tab').forEach((btn) => btn.classList.remove('active'))
+      
+        if (type === 'otp') {
+          document.querySelectorAll('.tab')[0].classList.add('active')
+        } else {
+          document.querySelectorAll('.tab')[1].classList.add('active')
+        }
+      }
+      
+      // ================= OTP AUTO-FILL =================
+      const inputs = document.querySelectorAll('#otpContainer input')
+      
+      inputs.forEach((input, index) => {
+        input.addEventListener('input', () => {
+          if (input.value.length === 1 && index < inputs.length - 1) {
+            inputs[index + 1].focus()
+          }
+        })
+      
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Backspace' && !input.value && index > 0) {
+            inputs[index - 1].focus()
+          }
+        })
+      
+        input.addEventListener('paste', (e) => {
+          let pasteData = e.clipboardData.getData('text').trim()
+      
+          if (pasteData.length === 6) {
+            inputs.forEach((inp, i) => {
+              inp.value = pasteData[i] || ''
+            })
+            inputs[5].focus()
+          }
+          e.preventDefault()
+        })
+      })
+      
+      function getOTPValue() {
+        return Array.from(inputs)
+          .map((i) => i.value)
+          .join('')
+      }
+      
+      // ================= PREFILL EMAIL FROM REDIRECT =================
+      window.onload = function () {
+        const params = new URLSearchParams(window.location.search)
+        const email = params.get('email')
+      
+        if (email) {
+          const emailInput = document.getElementById('email')
+          const faceEmailInput = document.getElementById('faceEmail')
+      
+          if (emailInput) emailInput.value = email
+          if (faceEmailInput) faceEmailInput.value = email
+      
+          // auto switch to OTP tab
+          showSection('otp')
+        }
+      }
+    </script>
+  </body>
+</html>
