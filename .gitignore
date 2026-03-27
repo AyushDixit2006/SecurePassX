@@ -41,6 +41,3 @@ Thumbs.db
 # MIGRATION CACHE (KEEP MIGRATIONS!)
 **/migrations/*.pyc
 
-
-# Python-dotenv 
-.env
