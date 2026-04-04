@@ -1,0 +1,13 @@
+Django>=5.0
+djangorestframework
+django-cors-headers
+numpy
+opencv-python
+face-recognition
+dlib
+requests
+python-dotenv
+disposal-email-domains
+djangorestframework-simplejwt
+whitenoise
+gunicorn
