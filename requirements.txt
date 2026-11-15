@@ -15,3 +15,4 @@ disposable-email-domains
 # Production deployment
 gunicorn
 whitenoise
+setuptools<81
