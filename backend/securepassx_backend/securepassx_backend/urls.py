@@ -19,7 +19,10 @@ from django.contrib import admin
 from django.urls import path, include
 from rest_framework_simplejwt.views import TokenRefreshView
 
+from django.views.generic import RedirectView
+
 urlpatterns = [
+    path("", RedirectView.as_view(url="/static/html/login.html", permanent=False)),
     path("admin/", admin.site.urls),
     path("api/auth/", include("authentication.urls")),
     path("api/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
