@@ -1,5 +1,12 @@
-const BASE_URL = "http://127.0.0.1:8000/api/auth";
+const API_ORIGIN =
+    window.location.port === "5500"
+        ? "http://127.0.0.1:8000"
+        : "";
 
+const BASE_URL = `${API_ORIGIN}/api/auth`;
+
+
+let registrationAuthorizationToken = null;
 
 // =====================
 // GET EMAIL
@@ -93,12 +100,18 @@ async function verifyOTP() {
         let res = await fetch(`${BASE_URL}/verify-otp/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, otp })
+            body: JSON.stringify({
+                email,
+                otp,
+                purpose: "register"
+            })
         });
 
         let data = await res.json();
 
-        if (data.message) {
+        if (data.message && data.authorization_token) {
+
+            registrationAuthorizationToken = data.authorization_token;
 
             showSuccess("OTP Verified ✅");
 
@@ -149,6 +162,11 @@ async function registerFace() {
         return;
     }
 
+    if (!registrationAuthorizationToken) {
+        showError("Please verify your registration OTP first.");
+        return;
+    }
+
     updateScanText("Opening camera...");
     await openCamera();
 
@@ -166,7 +184,11 @@ async function registerFace() {
         let res = await fetch(`${BASE_URL}/face-register/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, images })
+            body: JSON.stringify({
+                email,
+                images,
+                authorization_token: registrationAuthorizationToken
+            })
         });
 
         let data = await res.json();
@@ -174,7 +196,10 @@ async function registerFace() {
         if (data.message) {
 
             updateScanText("Face Registered ✅");
-            showSuccess("Registration Complete 🎉");
+            showSuccess("Registration Completed 🎉");
+
+            // Clear the one-time authorization token
+            registrationAuthorizationToken = null;
 
             setTimeout(() => {
                 window.location.href = "login.html";

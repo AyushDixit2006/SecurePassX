@@ -41,3 +41,30 @@ Thumbs.db
 # MIGRATION CACHE (KEEP MIGRATIONS!)
 **/migrations/*.pyc
 
+
+
+
+
+# ===============================
+# SECUREPASSX PRODUCTION PROTECTION
+# ===============================
+
+# Environment secrets
+.env
+.env.*
+!.env.example
+
+# Actual Python virtual environment
+Secure_venv/
+
+# Local database backups
+*.sqlite3
+*.sqlite3-journal
+*.db-backup
+
+# Temporary test scripts
+*_temp.py
+
+# Local development artifacts
+.DS_Store
+Thumbs.db

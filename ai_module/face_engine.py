@@ -69,8 +69,9 @@ def is_real_face(image):
         if blur_score < 80:
             return False
 
-        # 2️⃣ Face detection (must be exactly 1 face)
-        face_locations = face_recognition.face_locations(image)
+        # 2. Face detection (must be exactly 1 face)
+        rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        face_locations = face_recognition.face_locations(rgb)
 
         if len(face_locations) != 1:
             return False
@@ -111,3 +112,74 @@ def validate_live_frames(frames):
             valid_count += 1
 
     return valid_count >= 2
+
+
+# =========================================
+# BASIC MOVEMENT-BASED LIVENESS CHECK
+# =========================================
+def has_face_movement(frames):
+    """
+    Checks normalized facial landmark movement across frames.
+
+    This is basic movement detection, not advanced anti-spoofing.
+    """
+
+    nose_positions = []
+
+    try:
+        for image in frames:
+            if image is None:
+                continue
+
+            rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+            locations = face_recognition.face_locations(rgb)
+
+            if len(locations) != 1:
+                continue
+
+            landmarks = face_recognition.face_landmarks(
+                rgb,
+                face_locations=locations
+            )
+
+            if len(landmarks) != 1:
+                continue
+
+            points = landmarks[0]
+
+            if not all(
+                key in points
+                for key in ("nose_tip", "left_eye", "right_eye")
+            ):
+                continue
+
+            nose = np.mean(points["nose_tip"], axis=0)
+            left_eye = np.mean(points["left_eye"], axis=0)
+            right_eye = np.mean(points["right_eye"], axis=0)
+
+            eye_distance = np.linalg.norm(left_eye - right_eye)
+
+            if eye_distance <= 0:
+                continue
+
+            eye_midpoint = (left_eye + right_eye) / 2
+
+            normalized_nose = (
+                nose - eye_midpoint
+            ) / eye_distance
+
+            nose_positions.append(normalized_nose)
+
+        if len(nose_positions) < 3:
+            return False
+
+        movement = sum(
+            np.linalg.norm(nose_positions[i] - nose_positions[i + 1])
+            for i in range(len(nose_positions) - 1)
+        )
+
+        return movement >= 0.08
+
+    except (ValueError, TypeError, cv2.error):
+        return False

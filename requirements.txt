@@ -1,14 +1,17 @@
+
 Django>=5.0
 djangorestframework
 django-cors-headers
 numpy
-opencv-python
+opencv-python-headless
 face-recognition
 dlib
 requests
 python-dotenv
-disposal-email-domains
-disposal-email-checker
+django-disposable-email-checker
 djangorestframework-simplejwt
-whitenoise
+disposable-email-domains
+
+# Production deployment
 gunicorn
+whitenoise

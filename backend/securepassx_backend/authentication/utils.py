@@ -5,7 +5,6 @@ import cv2
 import threading
 import requests  
 
-from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
 
 from disposable_email_domains import blocklist
@@ -71,73 +70,50 @@ def is_disposable_email(email):
 # SEND EMAIL IN BACKGROUND
 # ===============================
 
+
 def send_email_background(email, otp):
     try:
-        subject = "SecurePassX Verification Code"
-
-        html_content = f"""<!DOCTYPE html>
-<html>
-<head><meta charset="UTF-8"></head>
-<body style="margin:0;padding:0;background:#0f172a;font-family:Arial, sans-serif;">
-<div style="max-width:600px;margin:auto;padding:20px;">
-<div style="background:#020617;border-radius:16px;padding:30px;border:1px solid #1e293b;box-shadow:0px 0px 20px rgba(0,0,0,0.5);">
-
-<h2 style="text-align:center;color:#38bdf8;">🔐 SecurePassX</h2>
-<p style="text-align:center;color:#64748b;">Passwordless Authentication System</p>
-
-<h1 style="text-align:center;color:white;margin-top:30px;">Hello 👋</h1>
-
-<p style="text-align:center;color:#cbd5f5;">
-Use the OTP below to securely log in: 
-</p>
-
-
-<div style="
-background:linear-gradient(90deg,#22c55e,#16a34a);
-color:white;
-text-align:center;
-font-size:42px;
-letter-spacing:8px;
-padding:15px;
-margin:30px 0;
-border-radius:10px;
-font-weight:bold;">
-{otp}
-</div>
-
-<p style="text-align:center;color:#94a3b8;">
-⏳ Valid for 5 minutes<br>🔒 Do not share
-</p>
-
-<hr style="border:0.5px solid #1e293b;margin:25px 0;">
-
-<p style="text-align:center;color:#64748b;font-size:13px;">
-If not requested, ignore this email.
-</p>
-
-<p style="text-align:center;color:#334155;font-size:12px;">
-© 2026 SecurePassX
-</p>
-
-</div></div></body></html>
-"""
 
         text_content = f"Your OTP is {otp}. Valid for 5 minutes."
 
-        msg = EmailMultiAlternatives(
-            subject,
-            text_content,
-            settings.EMAIL_HOST_USER,
-            [email],
+        relay_url = settings.EMAIL_RELAY_URL
+        relay_secret = settings.EMAIL_RELAY_SECRET
+
+        response = requests.post(
+            relay_url,
+            json={
+                "secret": relay_secret,
+                "email": email,
+                "otp": otp,
+                "purpose": "verification"
+            },
+            timeout=30,
+            allow_redirects=False
         )
 
-        msg.attach_alternative(html_content, "text/html")
-        msg.send()
+        if response.status_code == 302:
+            redirect_url = response.headers.get("Location")
 
-        print("✅ OTP Email sent")
+            if not redirect_url:
+                raise Exception("Google relay returned no redirect URL")
 
-    except Exception as e:
-        print("❌ Email Error:", e)
+            response = requests.get(
+                redirect_url,
+                timeout=30
+            )
+
+        response.raise_for_status()
+
+        result = response.json()
+
+        if not result.get("success"):
+            raise Exception(result.get("message", "Email relay rejected request"))
+
+        print(f"OTP email sent successfully to {email}")
+
+    except Exception as exc:
+        print("EMAIL RELAY ERROR TYPE:", type(exc).__name__)
+        print("EMAIL RELAY ERROR DETAILS:", repr(exc))
 
 
 # ===============================

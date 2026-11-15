@@ -1,69 +1,56 @@
-const BASE_URL = "http://127.0.0.1:8000/api/auth";
+const API_ORIGIN =
+    window.location.port === "5500"
+        ? "http://127.0.0.1:8000"
+        : "";
 
+const BASE_URL = `${API_ORIGIN}/api/auth`;
+
+let faceRecoveryAuthorizationToken = null;
 
 // =====================
-// GET EMAIL (SMART)
+// GET EMAIL
 // =====================
 function getEmail() {
     return (
         document.getElementById("email")?.value ||
         document.getElementById("faceEmail")?.value
-    );
+    ).trim();
 }
 
 
 // =====================
-// SEND OTP
+// SEND NORMAL OTP
 // =====================
 async function sendOTP() {
-
-    let email = getEmail();
+    const email = getEmail();
 
     if (!email) {
-        alert("Enter email");
+        showError("Enter email");
         return;
     }
 
     try {
-        let res = await fetch(`${BASE_URL}/send-otp/`, {
+        const res = await fetch(`${BASE_URL}/send-otp/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email, purpose: "login" })
         });
 
-        let data;
-        try {
-            data = await res.json();
-        } catch {
-            throw new Error("Invalid server response");
-        }
+        const data = await res.json();
 
         if (!res.ok) {
             showError(data.error || "Server error");
             return;
         }
 
-        if (data.message) {
+        showSuccess("OTP sent successfully.");
 
-            showSuccess("OTP sent successfully 📩");
+        document.getElementById("otpContainer").style.display = "flex";
+        document.getElementById("loginBtn").style.display = "block";
+        document.getElementById("sendOtpBtn").style.display = "none";
+        document.getElementById("resendOtpBtn").style.display = "block";
 
-            // ✅ SHOW OTP INPUT
-            document.getElementById("otpContainer").style.display = "flex";
-            document.getElementById("loginBtn").style.display = "block";
-
-            // ✅ HIDE SEND BUTTON
-            document.getElementById("sendOtpBtn").style.display = "none";
-
-            // ✅ SHOW RESEND BUTTON
-            const resendBtn = document.getElementById("resendOtpBtn");
-            resendBtn.style.display = "block";
-
-            // ✅ START TIMER
-            startOtpTimer();
-
-        } else {
-            showError(data.error);
-        }
+        startOtpTimer();
 
     } catch (err) {
         console.error(err);
@@ -76,182 +63,331 @@ async function sendOTP() {
 // LOGIN WITH OTP
 // =====================
 async function loginOTP() {
-
-    let email = document.getElementById("email").value;
-    let otp = getOTPValue();
+    const email = document.getElementById("email").value.trim();
+    const otp = getOTPValue();
 
     if (!email || !otp) {
-        alert("Enter email and OTP");
+        showError("Enter email and OTP");
         return;
     }
 
     try {
-        let res = await fetch(`${BASE_URL}/login-otp/`, {
+        const res = await fetch(`${BASE_URL}/login-otp/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email, otp })
         });
 
-        let data = await res.json();
+        const data = await res.json();
 
-        if (data.message) {
+        if (!res.ok) {
+            showError(data.error || "Login failed");
 
-            // ✅ SAVE TOKEN (NEW)
-            if (data.access) {
-                localStorage.setItem("user_email", email);
-                localStorage.setItem("access_token", data.access);
-                localStorage.setItem("refresh_token", data.refresh);
-            }
-
-            showSuccess("Login Successful ✅");
-
-            setTimeout(() => {
-                window.location.href = "dashboard.html";
-            }, 800);
-
-        } else {
-
-            showError(data.error);
-
-            // 🚫 BLOCK UI AFTER MAX ATTEMPTS
-            if (data.error && data.error.includes("Too many attempts")) {
-
-                // Disable OTP inputs
+            if (data.error?.includes("Too many attempts")) {
                 document.querySelectorAll(".otp-container input").forEach(input => {
                     input.disabled = true;
                 });
 
-
-                // Disable resend
                 const resendBtn = document.getElementById("resendOtpBtn");
                 if (resendBtn) {
                     resendBtn.style.pointerEvents = "none";
                     resendBtn.style.opacity = "0.5";
                 }
 
-
-                // Disable login button
                 const loginBtn = document.getElementById("loginBtn");
-                if (loginBtn) {
-                    loginBtn.disabled = true;
-
-                }
-
+                if (loginBtn) loginBtn.disabled = true;
             }
+
+            return;
+        }
+
+        if (data.access && data.refresh) {
+            localStorage.setItem("user_email", email);
+            localStorage.setItem("access_token", data.access);
+            localStorage.setItem("refresh_token", data.refresh);
+
+            showSuccess("Login successful.");
+
+            setTimeout(() => {
+                window.location.href = "dashboard.html";
+            }, 800);
         }
 
     } catch (err) {
+        console.error(err);
         showError("Server error");
     }
 }
-
-
 
 
 // =====================
 // LOGIN WITH FACE
 // =====================
 async function loginFace() {
-
-    let email = document.getElementById("faceEmail")?.value;
+    const email = document.getElementById("faceEmail")?.value.trim();
 
     if (!email) {
-        alert("Enter email first");
+        showError("Enter email first.");
         return;
     }
 
-    // ===============================
-    // 🔥 CHECK BLOCK BEFORE CAMERA
-    // ===============================
+    // Never expose recovery controls before a qualifying liveness failure.
+    hideFaceRecoveryControls();
+
     try {
-        let res = await fetch(`${BASE_URL}/check-block/`, {
+        const blockResponse = await fetch(`${BASE_URL}/check-block/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email })
         });
 
-        let data = await res.json();
+        const blockData = await blockResponse.json();
 
-        if (data.blocked) {
-            showError("You are blocked. Try again after 1 hour");
-            return; // 🚫 STOP HERE (NO CAMERA)
-        }
+        if (blockData.blocked) {
+            updateScanText("Face login temporarily blocked.");
 
-    } catch (err) {
-        console.error("Block check failed:", err);
-    }
+            showError(
+                `Face login temporarily blocked. Try again in ${Math.ceil(blockData.remaining_seconds / 60)
+                } minute(s). You can use normal OTP login.`
+            );
 
-
-    updateScanText("Opening camera...");
-    await openCamera();   // 🔥 ADD THIS LINE
-
-    try {
-        let images = await captureAndStop();
-
-        if (!images || images.length < 3) {
-            updateScanText("Capture failed ❌");
-            showError("Face capture failed");
             return;
         }
 
-        updateScanText("Verifying...");
+        await openCamera();
 
-        let res = await fetch(`${BASE_URL}/login-face/`, {
+        const images = await captureAndStop();
+
+        if (!images || images.length < 3) {
+            showError("Face capture failed. Please try again.");
+            return;
+        }
+
+        const res = await fetch(`${BASE_URL}/login-face/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email, images })
         });
 
-        let data = await res.json();
+        const data = await res.json();
 
-        if (data.message) {
+        if (res.ok && data.access && data.refresh) {
+            localStorage.setItem("user_email", email);
+            localStorage.setItem("access_token", data.access);
+            localStorage.setItem("refresh_token", data.refresh);
 
-            // ✅ SAVE TOKEN (NEW)
-            if (data.access) {
-                localStorage.setItem("user_email", email);
-                localStorage.setItem("access_token", data.access);
-                localStorage.setItem("refresh_token", data.refresh);
-                // 🔥 RESET FAIL COUNT
-                localStorage.removeItem("face_fail_count");
-
-            }
-
-            updateScanText("Access Granted ✅");
-            showSuccess("Face Login Success");
+            showSuccess("Face login successful.");
 
             setTimeout(() => {
                 window.location.href = "dashboard.html";
             }, 800);
 
-        } else {
-
-            updateScanText("Face mismatch ❌");
-            showError(data.error);
-
-            // 🔥 GET FAIL COUNT
-            let failCount = localStorage.getItem("face_fail_count") || 0;
-            failCount = parseInt(failCount) + 1;
-
-            localStorage.setItem("face_fail_count", failCount);
-
-            console.log("Face Fail Count:", failCount);
-
-            // 🔔 WARNING BEFORE FINAL ATTEMPT
-            if (failCount === 2) {
-                showError("⚠️ One more failed attempt will enable face update");
-            }
-
-            // 🔥 SHOW UPDATE BUTTON AFTER 3 FAILS
-            if (failCount >= 3) {
-                showUpdateButton();
-            }
+            return;
         }
 
+        // Face mismatch block: never offer face recovery here.
+        if (res.status === 429 && data.blocked) {
+            hideFaceRecoveryControls();
+
+            showError(
+                "Face login blocked for 15 minutes. You can use normal OTP login."
+            );
+
+            return;
+        }
+
+        // First and second genuine face mismatch.
+        if (res.status === 401 && Number.isInteger(data.failed_attempts)) {
+            hideFaceRecoveryControls();
+
+            const remaining = data.attempts_remaining;
+
+            if (remaining === 1) {
+                showError("Warning! This is your last attempt.");
+            } else {
+                showError(`Face mismatch. ${remaining} attempts remaining.`);
+            }
+            return;
+        }
+
+        // Registered face matched, but movement/liveness failed.
+        if (
+            data.liveness_failed_attempts &&
+            data.recovery_required === true
+        ) {
+            showFaceRecoveryOTPControls();
+
+            showError(
+                "Insufficient movement detected after three attempts. Verify your registered email to recover your face."
+            );
+
+            return;
+        }
+
+        if (Number.isInteger(data.liveness_failed_attempts)) {
+            showError(
+                data.error || "Please move your face slightly and try again."
+            );
+
+            return;
+        }
+
+        showError(data.error || "Face login failed.");
 
     } catch (err) {
-        console.error(err);
-        updateScanText("Error ❌");
-        showError("Server error");
+        console.error("Face login error:", err);
+        showError("Unable to complete face login. Please try again.");
+    }
+}
+
+
+// =====================
+// RECOVERY UI
+// =====================
+function hideFaceRecoveryControls() {
+    faceRecoveryAuthorizationToken = null;
+
+    const section = document.getElementById("faceRecoverySection");
+    const updateBtn = document.getElementById("updateFaceBtn");
+    const otpContainer = document.getElementById("faceRecoveryOtpContainer");
+
+    if (section) section.style.display = "none";
+    if (updateBtn) updateBtn.style.display = "none";
+    if (otpContainer) otpContainer.style.display = "none";
+
+    const otpInput = document.getElementById("faceRecoveryOtp");
+    if (otpInput) otpInput.value = "";
+
+    const sendBtn = document.getElementById("sendFaceRecoveryOtpBtn");
+    if (sendBtn) {
+        sendBtn.style.display = "block";
+        sendBtn.disabled = false;
+    }
+}
+
+function showFaceRecoveryOTPControls() {
+    const section = document.getElementById("faceRecoverySection");
+    const updateBtn = document.getElementById("updateFaceBtn");
+
+    if (section) section.style.display = "block";
+    if (updateBtn) updateBtn.style.display = "none";
+
+    const otpContainer = document.getElementById("faceRecoveryOtpContainer");
+    if (otpContainer) otpContainer.style.display = "none";
+}
+
+window.showFaceRecoverySection = function () {
+    if (!faceRecoveryAuthorizationToken) {
+        showError("Verify your recovery OTP first.");
+        return;
+    }
+
+    const section = document.getElementById("faceRecoverySection");
+    if (section) section.style.display = "block";
+};
+
+
+// =====================
+// SEND FACE RECOVERY OTP
+// =====================
+async function sendFaceRecoveryOTP() {
+
+
+    // A new recovery OTP requires fresh verification.
+    faceRecoveryAuthorizationToken = null;
+
+    const updateBtn = document.getElementById("updateFaceBtn");
+    if (updateBtn) updateBtn.style.display = "none";
+
+    const email = document.getElementById("faceEmail")?.value.trim();
+
+    if (!email) {
+        showError("Enter your registered email first.");
+        return;
+    }
+
+    try {
+        const res = await fetch(`${BASE_URL}/send-otp/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                email,
+                purpose: "face_recovery"
+            })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            showError(data.error || "Unable to send recovery OTP.");
+            return;
+        }
+
+        const otpContainer = document.getElementById("faceRecoveryOtpContainer");
+        const sendBtn = document.getElementById("sendFaceRecoveryOtpBtn");
+
+        if (otpContainer) otpContainer.style.display = "block";
+        if (sendBtn) sendBtn.style.display = "none";
+
+        showSuccess("Recovery OTP sent to your registered email.");
+
+    } catch (err) {
+        console.error("Recovery OTP error:", err);
+        showError("Unable to send recovery OTP.");
+    }
+}
+
+
+// =====================
+// VERIFY FACE RECOVERY OTP
+// =====================
+async function verifyFaceRecoveryOTP() {
+    const email = document.getElementById("faceEmail")?.value.trim();
+    const otp = document.getElementById("faceRecoveryOtp")?.value.trim();
+
+    if (!email || !otp) {
+        showError("Enter your registered email and recovery OTP.");
+        return;
+    }
+
+    try {
+        const res = await fetch(`${BASE_URL}/verify-otp/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                email,
+                otp,
+                purpose: "face_recovery"
+            })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            showError(data.error || "OTP verification failed.");
+            return;
+        }
+
+        if (!data.authorization_token) {
+            showError("Server did not return a recovery authorization token.");
+            return;
+        }
+
+        faceRecoveryAuthorizationToken = data.authorization_token;
+
+        const otpContainer = document.getElementById("faceRecoveryOtpContainer");
+        const updateBtn = document.getElementById("updateFaceBtn");
+        const sendBtn = document.getElementById("sendFaceRecoveryOtpBtn");
+
+        if (otpContainer) otpContainer.style.display = "none";
+        if (sendBtn) sendBtn.style.display = "none";
+        if (updateBtn) updateBtn.style.display = "block";
+
+        showSuccess("Recovery OTP verified. You can now update your face.");
+
+    } catch (err) {
+        console.error("Recovery verification error:", err);
+        showError("Unable to verify recovery OTP.");
     }
 }
 
@@ -260,66 +396,64 @@ async function loginFace() {
 // UPDATE FACE
 // =====================
 async function updateFace() {
+    const email = document.getElementById("faceEmail")?.value.trim();
 
-    let email = getEmail();
-
-    if (!email) {
-        alert("Enter email first");
+    if (!faceRecoveryAuthorizationToken) {
+        showError("Verify your face recovery OTP before updating your face.");
         return;
     }
 
-    updateScanText("Opening camera...");
-
-    // 🔥 FIX: REOPEN CAMERA
-    await openCamera();
-
-    updateScanText("Re-capturing face...");
+    if (!email) {
+        showError("Enter your registered email first.");
+        return;
+    }
 
     try {
-        let images = await captureAndStop();
+        await openCamera();
+
+        const images = await captureAndStop();
 
         if (!images || images.length < 3) {
-            showError("Capture failed");
+            showError("Face capture failed. Please try again.");
             return;
         }
 
-        let res = await fetch(`${BASE_URL}/update-face/`, {
+        const res = await fetch(`${BASE_URL}/update-face/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, images })
+            body: JSON.stringify({
+                email,
+                images,
+                authorization_token: faceRecoveryAuthorizationToken
+            })
         });
 
-        let data = await res.json();
+        const data = await res.json();
+
+        if (!res.ok) {
+            showError(data.error || "Face update failed.");
+            return;
+        }
 
         if (data.message) {
-            updateScanText("Face Updated ✅");
-            showSuccess("Face updated successfully");
+            faceRecoveryAuthorizationToken = null;
 
-            // 🔥 RESET FAIL COUNT
-            localStorage.removeItem("face_fail_count");
+            hideFaceRecoveryControls();
 
+            showSuccess("Face updated successfully.");
         } else {
-            showError(data.error);
+            showError(data.error || "Face update failed.");
         }
 
     } catch (err) {
-        console.error(err);
-        showError("Server error");
+        console.error("Face update error:", err);
+        showError("Server error while updating face.");
     }
 }
 
 
 // =====================
-// SHOW UPDATE BUTTON
-// =====================
-function showUpdateButton() {
-    let btn = document.getElementById("updateFaceBtn");
-    if (btn) btn.style.display = "block";
-}
-
-
-// =====================
-// UI FEEDBACK SYSTEM
+// SHOW / HIDE FEEDBACK
 // =====================
 function showSuccess(msg) {
     alert(msg);
@@ -336,20 +470,17 @@ function showError(msg) {
 function showOTPSection() {
     const section = document.getElementById("otpSection");
 
-    if (section) {
-        section.style.display = "block";
-    }
+    if (section) section.style.display = "block";
 }
 
 
-
 // =====================
-// Start OTP Timer
+// OTP TIMER
 // =====================
-
 function startOtpTimer() {
+    const resendBtn = document.getElementById("resendOtpBtn");
 
-    let resendBtn = document.getElementById("resendOtpBtn");
+    if (!resendBtn) return;
 
     let timeLeft = 60;
 
@@ -358,8 +489,7 @@ function startOtpTimer() {
 
     resendBtn.innerHTML = `Resend OTP (${timeLeft}s)`;
 
-    let interval = setInterval(() => {
-
+    const interval = setInterval(() => {
         timeLeft--;
 
         resendBtn.innerHTML = `Resend OTP (${timeLeft}s)`;
@@ -371,16 +501,14 @@ function startOtpTimer() {
             resendBtn.style.pointerEvents = "auto";
             resendBtn.style.opacity = "1";
         }
-
     }, 1000);
 }
 
 
 // =====================
-//    TOKEN REFRESH 
+// TOKEN REFRESH
 // =====================
 async function refreshToken() {
-
     const refresh = localStorage.getItem("refresh_token");
 
     if (!refresh) {
@@ -389,7 +517,7 @@ async function refreshToken() {
     }
 
     try {
-        let res = await fetch("http://127.0.0.1:8000/api/token/refresh/", {
+        const res = await fetch(`${API_ORIGIN}/api/token/refresh/`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
@@ -397,15 +525,20 @@ async function refreshToken() {
             body: JSON.stringify({ refresh })
         });
 
-        let data = await res.json();
+        const data = await res.json();
 
-        if (data.access) {
-            localStorage.setItem("access_token", data.access);
-            return data.access;
-        } else {
+        if (!res.ok || !data.access) {
             console.log("Refresh failed");
             return null;
         }
+
+        localStorage.setItem("access_token", data.access);
+
+        if (data.refresh) {
+            localStorage.setItem("refresh_token", data.refresh);
+        }
+
+        return data.access;
 
     } catch (err) {
         console.error("Refresh error:", err);

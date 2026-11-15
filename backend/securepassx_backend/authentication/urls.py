@@ -39,6 +39,17 @@ urlpatterns = [
 
     path('login-history/',  views.login_history, name = 'login_history'),
 
+
+
+    #===================================
+    # Logout Dashboard
+    #===================================
+
+    path("logout/", views.logout_view, name="logout"),
+
+
+
+
     #===================================
     # Check Block Status
     #===================================
